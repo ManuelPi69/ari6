@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#17130f">
+<title>O Globe — laboratório cênico imersivo</title>
+<style>
+:root{--bg:#17130f;--panel:#241d17;--gold:#d6ad68;--cream:#f3e8d2;--muted:#b9aa94;--line:#6b5337}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--cream);font:16px/1.45 system-ui,Segoe UI,sans-serif;overflow:hidden}
+#stage{position:fixed;inset:0}canvas{display:block}
+#ui{position:fixed;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between}
+header,footer{pointer-events:auto;padding:12px 16px;background:linear-gradient(180deg,rgba(15,12,9,.92),rgba(15,12,9,.15));display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+header{justify-content:space-between}footer{background:linear-gradient(0deg,rgba(15,12,9,.95),transparent)}
+h1{font-size:clamp(17px,2vw,23px);margin:0;color:var(--gold);letter-spacing:.04em}
+button,select{background:#493622;color:var(--cream);border:1px solid #9a774b;border-radius:8px;padding:10px 13px;font:inherit;cursor:pointer}
+button:hover{background:#674c2c}button:focus-visible,select:focus-visible{outline:3px solid #f5cf83}
+button.primary{background:#9a6d32;color:#160f08;font-weight:700}
+#hud{pointer-events:auto;align-self:flex-start;margin:12px;max-width:min(440px,calc(100vw - 24px));background:rgba(28,22,17,.94);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:0 8px 32px #0008}
+#hud h2{font-size:18px;color:var(--gold);margin:0 0 6px}#hud p{margin:6px 0;color:#eee0c8}
+#hud .small{font-size:13px;color:var(--muted)}#progress{height:6px;background:#574632;border-radius:8px;overflow:hidden;margin:10px 0}#bar{height:100%;width:0;background:var(--gold);transition:width .25s}
+#tools{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+#notice{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#21190feF;border:1px solid var(--gold);border-radius:10px;padding:9px 14px;max-width:90vw;text-align:center;pointer-events:none}
+#quiz,#credits,#help{position:fixed;inset:0;background:#100d0bee;display:none;align-items:center;justify-content:center;padding:18px;pointer-events:auto;overflow:auto}
+.sheet{width:min(760px,100%);max-height:92vh;overflow:auto;background:#251d16;border:1px solid var(--gold);border-radius:16px;padding:22px;box-shadow:0 20px 70px #000}
+.sheet h2{color:var(--gold);margin-top:0}.answer{display:block;width:100%;text-align:left;margin:8px 0;background:#35291d}
+#feedback{padding:12px;background:#35291d;border-left:4px solid var(--gold);margin-top:12px}
+#debug{position:fixed;right:10px;top:68px;background:#000b;color:#9fefb0;padding:7px;font:12px monospace;display:none;pointer-events:none}
+#vrhint{font-size:12px;color:var(--muted)}
+#caption{position:fixed;bottom:105px;left:50%;transform:translateX(-50%);background:#080706d9;padding:8px 14px;border-radius:8px;max-width:80vw;text-align:center;display:none}
+@media(max-width:650px){header{padding:8px}#hud{margin:8px;padding:11px}footer{padding:8px}button{padding:9px;font-size:14px}}
+.high{filter:contrast(1.25)}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"}}
+</script>
+</head>
+<body>
+<div id="stage"></div>
+<div id="ui">
+<header><h1>O GLOBE · laboratório cênico imersivo</h1><div><button id="sound">Som: ligado</button> <button id="narrate">Narrar etapa</button> <button id="posture">Modo: em pé</button> <button id="contrast">Alto contraste</button> <button id="creditsBtn">Créditos e fontes</button></div></header>
+<section id="hud">
+<div class="small" id="stepLabel">TRILHA EM VR · ETAPA 1 DE 3</div><h2 id="stepTitle">Reconheça o espaço</h2>
+<p id="stepText">Explore o teatro e observe como o palco avançado aproxima os atores do público em três lados.</p>
+<div id="progress"><div id="bar"></div></div>
+<div class="small" id="instruction">Computador: WASD + mouse; arraste os atores. Tablet: toque e arraste. VR: aponte o controle e aperte o gatilho.</div>
+<div id="tools">
+<button id="prev">Anterior</button><button class="primary" id="next">Iniciar exploração</button>
+<button id="actorMode">Posicionar atores: não</button><button id="day">Luz: tarde</button>
+<button id="teleStage">Visão do ator</button><button id="telePit">Visão do público</button>
+</div>
+<p class="small" id="readout">Ponto de vista: pátio · Luz diurna · Acústica estimada: —</p>
+</section>
+<footer><span id="vrhint">WebXR: entre em VR quando o navegador permitir (pode exigir contexto seguro/HTTPS). Se indisponível, o modo 3D segue ativo.</span><span style="flex:1"></span><button id="quizBtn">Quiz final</button><button id="helpBtn">Como explorar</button></footer>
+</div>
+<div id="notice">Carregando o teatro…</div><div id="debug"></div><div id="caption"></div>
+<div id="quiz"><div class="sheet"><h2>Verificação de aprendizagem</h2><p>Responda às duas questões. O feedback explica a relação entre espaço, dramaturgia e hierarquia social.</p><div id="qcontent"></div><button id="closeQuiz">Voltar ao teatro</button></div></div>
+<div id="credits"><div class="sheet"><h2>Créditos e fontes</h2>
+<p><b>Referência visual:</b> quatro imagens fornecidas na conversa (vista axonométrica/cutaway, vistas internas e maquete superior). Foram usadas como orientação formal e material; não foram incorporadas como arquivos externos.</p><p><b>Modelo:</b> reconstrução interpretativa procedural, sem assets externos. Escala de navegação: 1 unidade Three.js ≈ 1 metro. As dimensões são estimativas pedagógicas para uma leitura próxima de 1:1; não constituem levantamento arqueológico nem reprodução métrica definitiva.</p>
+<p><b>Fontes consultadas para fundamentação e direção visual (acesso em 17/11/2026):</b></p><ul>
+<li>Shakespeare’s Globe — <a href="https://www.shakespearesglobe.com/discover/about-us/globe-theatre/" target="_blank" rel="noreferrer">Globe Theatre</a>: reconstrução atual em formato icosagonal, galerias, pátio sem cobertura, vigas de carvalho, paredes de cal e cobertura de palha (water reed thatch).</li>
+<li>Folger Shakespeare Library — <a href="https://www.folger.edu/explore/shakespeares-theater/" target="_blank" rel="noreferrer">Shakespeare’s theater</a>: edifício com vários lados, pátio central aberto, três níveis de galerias cobertas, palco elevado e convenções de encenação com cenário relativamente nu.</li>
+<li>Folger Shakespeare Library — <a href="https://www.folger.edu/explore/shakespeares-works/shakespeares-theater-from-the-folger-shakespeare-editions/" target="_blank" rel="noreferrer">Shakespeare’s Theater: From the Folger Shakespeare Editions</a>: groundlings, galerias pagas e incerteza documental sobre as dimensões e o desenho exato dos palcos.</li>
+<li>Folger Shakespeare Library — <a href="https://www.folger.edu/blogs/shakespeare-and-beyond/twelfth-night-indoors-and-out/" target="_blank" rel="noreferrer">From the Dark House to the Box Tree: Twelfth Night indoors and out</a> (29/08/2025): como espaços diferentes alteram as possibilidades de encenação.</li>
+<li>Shakespeare’s Globe — <a href="https://www.shakespearesglobe.com/discover/blogs-and-features/2026/05/27/designing-dream/" target="_blank" rel="noreferrer">From sketch to stage – Designing A Midsummer Night’s Dream</a> (27/05/2026): decisões de direção de arte em diálogo com a identidade arquitetônica do Globe.</li></ul>
+<p><b>Nota de rigor:</b> “hell” designa o espaço sob o palco e o alçapão permite efeitos de aparição; “tiring house” é a estrutura de bastidores. As dimensões e o desenho exatos do palco do primeiro Globe não são conhecidos com precisão. A simulação acústica é um modelo geométrico simplificado (distância + orientação), não uma simulação física de acústica arquitetônica nem substitui medição.</p>
+<button id="closeCredits">Fechar</button></div></div>
+<div id="help"><div class="sheet"><h2>Como explorar</h2><ul><li>Use “Visão do público” repetidamente para alternar entre pátio e as três galerias; compare com a perspectiva do ator no palco.</li><li>Na etapa acústica, selecione diferentes marcas do tablado. O índice sonoro estimado é recalculado pela distância e pelo ângulo de projeção.</li><li>Na etapa de cenografia verbal, alterne a luz e observe: a fala cria a noite imaginada mesmo sob a luz do dia.</li><li>Ative “Posicionar atores” e arraste os personagens entre hell, palco e sacada. A altura altera a leitura visual de poder.</li><li>Em VR, gatilho seleciona; grip permite agarrar; thumbstick para teleporte curto e giro por etapas.</li></ul><p>Use “Narrar etapa” para ouvir instruções em português e mantenha o texto da etapa como legenda. Para melhor conforto, use teleporte e pausas. Use o botão “Modo: sentado/em pé” para ajustar a altura da câmera; no headset, a origem do piso é solicitada via local-floor.</p><button id="closeHelp">Fechar</button></div></div>
+<script type="module">
+import * as THREE from 'three';
+import { VRButton } from 'three/addons/webxr/VRButton.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const host=document.querySelector('#stage'), noticeEl=document.querySelector('#notice');
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x9b8770); scene.fog=new THREE.FogExp2(0x9b8770,.012);
+const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,.05,180); camera.position.set(0,1.65,12);scene.add(camera);
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));renderer.setSize(innerWidth,innerHeight);
+renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.xr.enabled=true;
+renderer.xr.setReferenceSpaceType('local-floor');
+renderer.xr.setFoveation(1);host.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xe6d9c2,0x493324,2.0));
+const sun=new THREE.DirectionalLight(0xffd6a0,2.4);sun.position.set(-9,18,10);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-24;sun.shadow.camera.right=24;sun.shadow.camera.top=24;sun.shadow.camera.bottom=-24;scene.add(sun);
+const pmrem=new THREE.PMREMGenerator(renderer);scene.environment=pmrem.fromScene(new RoomEnvironment(),.04).texture;pmrem.dispose();
+const mats={wood:new THREE.MeshStandardMaterial({color:0x765033,roughness:.86}),dark:new THREE.MeshStandardMaterial({color:0x34251c,roughness:.9}),plaster:new THREE.MeshStandardMaterial({color:0xc4a77c,roughness:1}),gold:new THREE.MeshStandardMaterial({color:0xb68a45,metalness:.25,roughness:.55}),stone:new THREE.MeshStandardMaterial({color:0x786a58,roughness:1}),cloth:new THREE.MeshStandardMaterial({color:0x762e2b,roughness:.95}),blue:new THREE.MeshStandardMaterial({color:0x243b50,roughness:.8}),skin:new THREE.MeshStandardMaterial({color:0xc68e69,roughness:.85}),black:new THREE.MeshStandardMaterial({color:0x211b19,roughness:1}),green:new THREE.MeshStandardMaterial({color:0x40543a,roughness:.9})};
+function box(parent,w,h,d,x,y,z,mat, bevel=.04){let g=new THREE.BoxGeometry(w,h,d);let m=new THREE.Mesh(g,mat);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m}
+function cyl(parent,r1,r2,h,x,y,z,mat,seg=12){let m=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,seg),mat);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m}
+function curveTube(parent,pts,r,mat){let c=new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(...p)));let o=new THREE.Mesh(new THREE.TubeGeometry(c,Math.max(16,pts.length*4),r,6,false),mat);parent.add(o);return o}
+function woodTexture(){let c=document.createElement('canvas');c.width=512;c.height=512;let x=c.getContext('2d');x.fillStyle='#795334';x.fillRect(0,0,512,512);for(let i=0;i<1200;i++){let y=Math.random()*512;x.strokeStyle=`rgba(${40+Math.random()*40},${20+Math.random()*25},${5+Math.random()*15},${Math.random()*.22})`;x.lineWidth=Math.random()*2+0.3;x.beginPath();x.moveTo(0,y);x.bezierCurveTo(130,y-12,330,y+12,512,y+(Math.random()-.5)*18);x.stroke()}let t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(2,2);return new THREE.MeshStandardMaterial({map:t,roughness:.9})}
+const timber=woodTexture();
+const world=new THREE.Group();scene.add(world);
+// Ground and central open yard
+const ground=new THREE.Mesh(new THREE.CircleGeometry(19,64),new THREE.MeshStandardMaterial({color:0x8b765e,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-.08;ground.receiveShadow=true;world.add(ground);
+const yard=new THREE.Mesh(new THREE.CircleGeometry(8.5,64),new THREE.MeshStandardMaterial({color:0x927a5c,roughness:1}));yard.rotation.x=-Math.PI/2;yard.position.y=.005;world.add(yard);
+// Arquitetura poligonal inspirada nas referências enviadas:
+// galerias em ferradura, balcões com balaustradas, estrutura enxaimel e cobertura inclinada.
+const N=20, R=16.0, start=-Math.PI/4, end=Math.PI*5/4; // abertura de 60° diante do palco
+const galleryY=[2.15,4.65,7.15];
+function makeAnnularArc(inner,outer,a0,a1,steps=72){
+  const sh=new THREE.Shape();
+  sh.moveTo(inner*Math.cos(a0),-inner*Math.sin(a0));
+  sh.lineTo(outer*Math.cos(a0),-outer*Math.sin(a0));
+  for(let i=1;i<=steps;i++){let a=a0+(a1-a0)*i/steps;sh.lineTo(outer*Math.cos(a),-outer*Math.sin(a))}
+  sh.lineTo(inner*Math.cos(a1),-inner*Math.sin(a1));
+  for(let i=steps-1;i>=0;i--){let a=a0+(a1-a0)*i/steps;sh.lineTo(inner*Math.cos(a),-inner*Math.sin(a))}
+  sh.closePath();
+  return new THREE.ExtrudeGeometry(sh,{depth:.28,bevelEnabled:true,bevelSegments:1,steps:1,bevelSize:.035,bevelThickness:.025});
+}
+function arcPoints(radius,y,a0=start,a1=end,count=72){
+  const pts=[];for(let i=0;i<=count;i++){let a=a0+(a1-a0)*i/count;pts.push([Math.cos(a)*radius,y,Math.sin(a)*radius])}return pts;
+}
+function addInstanced(parent,geometry,material,items){
+  const mesh=new THREE.InstancedMesh(geometry,material,items.length);
+  const obj=new THREE.Object3D();
+  items.forEach((it,i)=>{obj.position.set(it.x,it.y,it.z);obj.rotation.set(it.rx||0,it.ry||0,it.rz||0);obj.scale.set(it.sx||1,it.sy||1,it.sz||1);obj.updateMatrix();mesh.setMatrixAt(i,obj.matrix);if(it.color)mesh.setColorAt(i,new THREE.Color(it.color))});
+  mesh.instanceMatrix.needsUpdate=true;mesh.castShadow=true;mesh.receiveShadow=true;parent.add(mesh);return mesh;
+}
+// Piso descoberto do yard / pátio mantém o centro aberto.
+const galleryFloorMat=new THREE.MeshStandardMaterial({color:0x765032,roughness:.88});
+galleryY.forEach((y,i)=>{
+  const floor=new THREE.Mesh(makeAnnularArc(9.65,16.2,start,end),galleryFloorMat);
+  floor.rotation.x=-Math.PI/2;floor.position.y=y-.28;floor.castShadow=true;floor.receiveShadow=true;world.add(floor);
+});
+// Bancos corridos nas galerias, em madeira escura.
+const benchItems=[];
+galleryY.forEach((y,level)=>{for(let i=0;i<26;i++){
+  let a=start+(end-start)*(i+.5)/26,r=14.55;
+  benchItems.push({x:Math.cos(a)*r,y:y+.02,z:Math.sin(a)*r,ry:-a,sx:1.0,sy:1,sz:1});
+}});
+addInstanced(world,new THREE.BoxGeometry(1.65,.22,.62),timber,benchItems);
+// Balaustradas internas em três níveis: montantes torneados e corrimãos contínuos.
+const balusterItems=[];
+galleryY.forEach(y=>{for(let i=0;i<=42;i++){let a=start+(end-start)*i/42,r=10.05;balusterItems.push({x:Math.cos(a)*r,y:y+.63,z:Math.sin(a)*r,sy:1.0})}});
+addInstanced(world,new THREE.CylinderGeometry(.045,.065,.82,8),mats.gold,balusterItems);
+galleryY.forEach(y=>{
+  curveTube(world,arcPoints(10.05,y+1.04),.105,timber);
+  curveTube(world,arcPoints(10.05,y+.26),.065,mats.dark);
+});
+// Estrutura externa: pilares de carvalho, panos claros e travessas enxaimel.
+const outerPosts=[];
+for(let i=0;i<=N;i++){let a=start+(end-start)*i/N,r=16.28;outerPosts.push({x:Math.cos(a)*r,y:4.15,z:Math.sin(a)*r})}
+addInstanced(world,new THREE.CylinderGeometry(.14,.2,8.3,10),timber,outerPosts);
+const infillItems=[];
+for(let i=0;i<N;i++){let a=start+(end-start)*(i+.5)/N,r=16.22;infillItems.push({x:Math.cos(a)*r,y:4.15,z:Math.sin(a)*r,ry:-a-Math.PI/2,sx:1.0,sy:1,sz:1})}
+addInstanced(world,new THREE.BoxGeometry(4.0,7.75,.18),mats.plaster,infillItems);
+for(let y of [.35,2.05,4.55,7.05,8.25])curveTube(world,arcPoints(16.36,y),.13,timber);
+// travessas inclinadas decorativas do enxaimel
+const braceItems=[];
+for(let i=0;i<N;i+=2){let a=start+(end-start)*(i+.5)/N,r=16.39;
+  braceItems.push({x:Math.cos(a)*r,y:2.9,z:Math.sin(a)*r,ry:-a-Math.PI/2,rz:.48,sx:2.45,sy:.055,sz:.09});
+  braceItems.push({x:Math.cos(a)*r,y:5.8,z:Math.sin(a)*r,ry:-a-Math.PI/2,rz:-.48,sx:2.45,sy:.055,sz:.09});
+}
+addInstanced(world,new THREE.BoxGeometry(1,1,1),timber,braceItems);
+// Cobertura em anel, inclinada para o exterior, com textura procedural de palha/reed.
+function makeThatchMaterial(){
+  // Palha/reed em camadas horizontais: referência material do telhado histórico reconstruído.
+  const c=document.createElement('canvas');c.width=512;c.height=512;const q=c.getContext('2d');
+  q.fillStyle='#9d885c';q.fillRect(0,0,512,512);
+  const straw=['#d1b779','#c3a96e','#b69b61','#dfc88d','#a9915f','#e0ce9b'];
+  for(let row=0;row<22;row++){
+    const y=row*24;
+    q.fillStyle='rgba(55,39,22,.18)';q.fillRect(0,y+21,512,3);
+    for(let j=0;j<90;j++){
+      const x=Math.random()*540-20,yy=y+Math.random()*22;
+      q.strokeStyle=straw[Math.floor(Math.random()*straw.length)];
+      q.lineWidth=.7+Math.random()*2.1;q.beginPath();q.moveTo(x,yy);
+      q.lineTo(x+8+Math.random()*20,yy-2+Math.random()*5);q.stroke();
+    }
+  }
+  const tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.repeat.set(2.3,1.7);
+  return new THREE.MeshStandardMaterial({map:tex,roughness:1,side:THREE.DoubleSide});
+}
+const roofMat=makeThatchMaterial();
+function makeRoofRing(){
+  const positions=[],uvs=[],indices=[];const segments=48,radialSteps=4;
+  for(let seg=0;seg<segments;seg++){
+    let a0=start+(end-start)*seg/segments+.003,a1=start+(end-start)*(seg+1)/segments-.003;
+    for(let j=0;j<radialSteps;j++){
+      let r0=11.0+(17.75-11.0)*j/radialSteps,r1=11.0+(17.75-11.0)*(j+1)/radialSteps;
+      const y0=10.45-(r0-11.0)*.32,y1=10.45-(r1-11.0)*.32;
+      let base=positions.length/3;
+      const pts=[[r0,a0,y0],[r1,a0,y1],[r1,a1,y1],[r0,a1,y0]];
+      pts.forEach((p,k)=>{positions.push(p[0]*Math.cos(p[1]),p[2],p[0]*Math.sin(p[1]));uvs.push(k===0||k===3?j/radialSteps:(j+1)/radialSteps,k<2?seg/segments:(seg+1)/segments)});
+      indices.push(base,base+1,base+2,base,base+2,base+3);
+    }
+  }
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));g.setIndex(indices);g.computeVertexNormals();
+  const mesh=new THREE.Mesh(g,roofMat);mesh.castShadow=true;mesh.receiveShadow=true;world.add(mesh);
+}
+makeRoofRing();
+curveTube(world,arcPoints(17.72,8.15),.24,timber);
+curveTube(world,arcPoints(11.0,10.45),.22,timber);
+// Caibros radiais aparentes sob a cobertura, em uma única malha instanciada.
+const rafterItems=[];
+for(let i=0;i<=36;i++){let a=start+(end-start)*i/36;
+  let r0=11.1,r1=17.55,mid=(r0+r1)/2,ym=10.45-(mid-11)*.32;
+  rafterItems.push({x:Math.cos(a)*mid,y:ym,z:Math.sin(a)*mid,ry:0});
+}
+const rafters= new THREE.InstancedMesh(new THREE.CylinderGeometry(.075,.11,1,8),timber,rafterItems.length);
+const rObj=new THREE.Object3D();rafterItems.forEach((it,i)=>{
+  const a=start+(end-start)*i/36, p0=new THREE.Vector3(Math.cos(a)*11.1,10.43,Math.sin(a)*11.1),p1=new THREE.Vector3(Math.cos(a)*17.55,8.30,Math.sin(a)*17.55);
+  const v=p1.clone().sub(p0);rObj.position.copy(p0).add(p1).multiplyScalar(.5);rObj.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),v.clone().normalize());rObj.scale.set(1,v.length(),1);rObj.updateMatrix();rafters.setMatrixAt(i,rObj.matrix);
+});
+rafters.castShadow=true;world.add(rafters);
+// Escadas laterais que conectam o pátio às galerias; degraus sólidos, não decorativos.
+const stairStepItems=[];
+for(let side of [-1,1]){
+  for(let level=0;level<3;level++){
+    let stairCount=10,baseY=level===0?.08:galleryY[level-1]+.16,topY=galleryY[level]-.18;
+    for(let j=0;j<stairCount;j++){let t=(j+1)/stairCount;let x=side*(10.7+level*.55),z=5.2-j*.62-level*.35,y=baseY+(topY-baseY)*t;
+      stairStepItems.push({x,y,z,ry:side*.12});
+    }
+    let railPts1=[],railPts2=[];
+    for(let j=0;j<=10;j++){let t=j/10;railPts1.push([side*(10.0+level*.55),baseY+(topY-baseY)*t+.95,5.45-j*.62-level*.35]);railPts2.push([side*(11.35+level*.55),baseY+(topY-baseY)*t+.95,5.45-j*.62-level*.35])}
+    curveTube(world,railPts1,.055,mats.gold);curveTube(world,railPts2,.055,mats.gold);
+  }
+}
+addInstanced(world,new THREE.BoxGeometry(1.35,.18,.68),timber,stairStepItems);
+// Stage thrust with chamfered polygon
+const stageShape=new THREE.Shape();stageShape.moveTo(-5.7,-2.0);stageShape.lineTo(5.7,-2);stageShape.lineTo(5.2,4.4);stageShape.lineTo(4.5,5.1);stageShape.lineTo(-4.5,5.1);stageShape.lineTo(-5.2,4.4);stageShape.closePath();
+let stageMesh=new THREE.Mesh(new THREE.ExtrudeGeometry(stageShape,{depth:.42,bevelEnabled:true,bevelSegments:2,steps:1,bevelSize:.12,bevelThickness:.08}),timber);stageMesh.rotation.x=-Math.PI/2;stageMesh.position.set(0,1.15,-7.2);stageMesh.castShadow=true;stageMesh.receiveShadow=true;world.add(stageMesh);
+box(world,12,.45,1.1,0,.85,-9.1,mats.dark);
+// stage apron boards
+addInstanced(world,new THREE.BoxGeometry(.07,.05,6.1),timber,Array.from({length:13},(_,i)=>({x:-5.7+i*.95,y:1.39,z:-7.0})));
+// Escadaria frontal do tablado avançado, como nas referências internas.
+box(world,4.8,.34,.72,0,1.34,-5.03,timber);
+box(world,4.8,.34,.72,0,.94,-4.34,timber);
+box(world,4.8,.34,.72,0,.54,-3.65,timber);
+for(let x of [-2.35,2.35]){
+  cyl(world,.1,.12,.75,x,1.72,-5.05,mats.gold,10);
+  let cap=cyl(world,.16,.12,.12,x,2.12,-5.05,mats.gold,10);
+}
+// Tiring house rear façade
+box(world,12,7.2,1.0,0,4.6,-12.8,mats.plaster);
+for(let x of [-4.1,4.1]){box(world,1.5,3.6,.4,x,3.2,-12.15,mats.dark);box(world,1.3,3.3,.15,x,3.2,-11.9,mats.wood);for(let j=0;j<3;j++)box(world,.06,3,.08,x-.4+j*.4,3.2,-11.78,mats.gold)}
+box(world,5.2,2.1,.25,0,3.5,-12.05,mats.cloth);
+box(world,12,1.0,.5,0,8.4,-12.5,timber);
+// balcony above tiring house
+box(world,7,.28,2,0,7.1,-10.8,timber);box(world,7,.9,.15,0,7.55,-9.9,mats.gold);
+addInstanced(world,new THREE.CylinderGeometry(.055,.055,.8,8),mats.gold,Array.from({length:9},(_,i)=>({x:-3+i*.75,y:7.5,z:-9.9})));
+// Frontão enxaimel da tiring house e pequeno hut/lantern acima do telhado.
+const gableShape=new THREE.Shape();gableShape.moveTo(-6.1,8.15);gableShape.lineTo(0,11.25);gableShape.lineTo(6.1,8.15);gableShape.closePath();
+const gable=new THREE.Mesh(new THREE.ExtrudeGeometry(gableShape,{depth:.22,bevelEnabled:true,bevelSegments:1,bevelSize:.035,bevelThickness:.03}),mats.plaster);
+gable.position.set(0,0,-12.18);gable.castShadow=true;world.add(gable);
+curveTube(world,[[-6.1,8.15,-11.94],[0,11.25,-11.94],[6.1,8.15,-11.94]],.16,timber);
+curveTube(world,[[-4.5,8.2,-11.92],[-2.2,9.2,-11.92],[0,10.35,-11.92],[2.2,9.2,-11.92],[4.5,8.2,-11.92]],.09,timber);
+for(let x of [-3.8,-1.9,0,1.9,3.8])box(world,.12,1.25,.12,x,8.8,-11.90,timber);
+box(world,0.12,.12,.12,0,9,-11.88,timber);
+for(let x of [-1.2,1.2]){let w=box(world,.1,1.8,.13,x,9.25,-11.88,timber);w.rotation.z=x<0?-.42:.42}
+for(let x of [-.75,.75])cyl(world,.055,.07,1.4,x,9.55,-11.78,mats.gold,8);
+box(world,2.1,.12,.9,0,11.35,-11.78,timber);
+for(let x of [-.9,.9])cyl(world,.06,.06,1.15,x,11.85,-11.78,mats.gold,8);
+const hutRoof=new THREE.Mesh(new THREE.ConeGeometry(1.5,.85,4),roofMat);hutRoof.position.set(0,12.35,-11.78);hutRoof.rotation.y=Math.PI/4;world.add(hutRoof);
+cyl(world,.055,.055,1.0,0,13.1,-11.78,mats.gold,8);
+// Heavens canopy above thrust stage
+box(world,12,.28,7,0,7.2,-7.2,mats.blue);
+for(let x of [-5.2,5.2]){cyl(world,.28,.34,5.8,x,4.1,-7.2,mats.gold,16);cyl(world,.38,.38,.3,x,1.4,-7.2,mats.gold,16)}
+const heavensStars=new THREE.InstancedMesh(new THREE.SphereGeometry(.045,6,6),mats.gold,30);const starObj=new THREE.Object3D();for(let i=0;i<30;i++){let x=(Math.random()-.5)*10,z=-7.2+(Math.random()-.5)*5;starObj.position.set(x,7.05,z);starObj.updateMatrix();heavensStars.setMatrixAt(i,starObj.matrix)}heavensStars.instanceMatrix.needsUpdate=true;world.add(heavensStars);
+// trapdoor and ladder/hell cutaway
+const trap=box(world,1.35,.12,1.2,0,1.62,-4.9,mats.dark);trap.userData.label='Alçapão — acesso ao hell';
+box(world,3,.22,3,0,-1.05,-7.0,mats.dark);box(world,3,.18,1,0,-.2,-7,mats.wood);
+for(let i=0;i<6;i++)box(world,1.8,.08,.16,0,-.05-i*.2,-6.5,mats.gold);
+// backstage props: trunks, stools, costume rack
+box(world,2,.9,1,-8,1,-11,mats.wood);box(world,1.8,.12,.8,-8,1.52,-11,mats.gold);
+for(let i=0;i<4;i++){cyl(world,.045,.045,3,-9+i*.55,3,-11,mats.gold,8);let cloth= new THREE.Mesh(new THREE.ConeGeometry(.45,1.8,8),i%2?mats.blue:mats.cloth);cloth.position.set(-9+i*.55,2.7,-11);world.add(cloth)}
+// Público em pé no yard e espectadores sentados nas três galerias.
+// Instancing reduz drasticamente draw calls para funcionamento em headset standalone.
+const audience=[];
+for(let i=0;i<72;i++){
+  let a=Math.random()*Math.PI*2,r=4.2+Math.random()*4.2,x=Math.cos(a)*r,z=Math.sin(a)*r;
+  if(z<-3.3&&Math.abs(x)<4.9)continue;
+  audience.push({x,y:.08,z,color:[0x4a3430,0x31414a,0x55452e,0x5d3a31][i%4]});
+}
+for(let level=0;level<3;level++){
+  for(let i=0;i<18;i++){
+    let a=start+(end-start)*(i+.5)/18,r=12.25+Math.random()*.35,x=Math.cos(a)*r,z=Math.sin(a)*r;
+    audience.push({x,y:galleryY[level]+.08,z,color:[0x4c4140,0x3d4b4c,0x5b3e32][(i+level)%3]});
+  }
+}
+const bodyGeo=new THREE.CylinderGeometry(.22,.28,.7,10);
+const headGeo=new THREE.SphereGeometry(.2,10,8);
+const hatGeo=new THREE.CylinderGeometry(.25,.22,.12,10);
+const bodies=new THREE.InstancedMesh(bodyGeo,new THREE.MeshStandardMaterial({color:0xffffff,roughness:.92}),audience.length);
+const heads=new THREE.InstancedMesh(headGeo,mats.skin,audience.length);
+const hats=new THREE.InstancedMesh(hatGeo,mats.dark,audience.length);
+const person=new THREE.Object3D();
+audience.forEach((p,i)=>{
+  person.position.set(p.x,p.y+.45,p.z);person.rotation.set(0,Math.atan2(-p.x,-p.z),0);person.scale.set(1,1,1);person.updateMatrix();
+  bodies.setMatrixAt(i,person.matrix);bodies.setColorAt(i,new THREE.Color(p.color));
+  person.position.set(p.x,p.y+.95,p.z);person.updateMatrix();heads.setMatrixAt(i,person.matrix);
+  person.position.set(p.x,p.y+1.12,p.z);person.updateMatrix();hats.setMatrixAt(i,person.matrix);
+});
+[bodies,heads,hats].forEach(m=>{m.castShadow=false;m.receiveShadow=false;m.instanceMatrix.needsUpdate=true;world.add(m)});
+// stage actors as stylized Renaissance performers; draggable/selectable
+function actor(name,x,y,z,coat,role){let g=new THREE.Group();g.position.set(x,y,z);g.userData={actor:true,name,role};world.add(g);
+cyl(g,.27,.36,1.05,0,.72,0,new THREE.MeshStandardMaterial({color:coat,roughness:.85}),12);
+let head=new THREE.Mesh(new THREE.SphereGeometry(.24,12,10),mats.skin);head.position.y=1.42;g.add(head);
+let hair=new THREE.Mesh(new THREE.SphereGeometry(.25,10,8,0,Math.PI*2,0,Math.PI*.55),mats.dark);hair.position.y=1.48;g.add(hair);
+for(let s of [-1,1]){let arm=cyl(g,.09,.12,.75,s*.34,.83,0,new THREE.MeshStandardMaterial({color:coat}),8);arm.rotation.z=s*.28}
+let collar=new THREE.Mesh(new THREE.TorusGeometry(.22,.06,6,12),mats.gold);collar.position.y=1.22;collar.rotation.x=Math.PI/2;g.add(collar);
+let base=new THREE.Mesh(new THREE.CylinderGeometry(.35,.42,.1,12),mats.gold);base.position.y=.08;g.add(base);
+return g}
+const actors=[actor('Ator — nobre',-2,1.42,-6.2,0x7a292c,'palco'),actor('Ator — mensageiro',2,1.42,-6.8,0x31506a,'palco'),actor('Figura — aparição',0,-.15,-4.9,0xaaa18d,'hell')];
+// upper balcony performer clone
+const balconyActor=actor('Figura — sacada',0,7.35,-10.1,0x6d4b2e,'sacada');actors.push(balconyActor);
+const labels=[];
+function label(text,x,y,z){let c=document.createElement('canvas');c.width=512;c.height=128;let ctx=c.getContext('2d');ctx.fillStyle='rgba(22,15,10,.82)';ctx.fillRect(0,0,512,128);ctx.strokeStyle='#d6ad68';ctx.lineWidth=5;ctx.strokeRect(4,4,504,120);ctx.fillStyle='#f6e6c9';ctx.font='bold 38px Georgia';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,256,64);let tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;let m=new THREE.Mesh(new THREE.PlaneGeometry(3.0,.75),new THREE.MeshBasicMaterial({map:tex,transparent:true,side:THREE.DoubleSide,depthWrite:false}));m.position.set(x,y,z);world.add(m);labels.push(m)}
+label('THE HEAVENS · cobertura cênica',0,8.1,-6.7);label('SACADA / BALCÃO',0,8.65,-10.1);label('TIRING HOUSE · bastidores',0,5.3,-13.45);label('ALÇAPÃO → HELL',0,2.2,-4.8);label('YARD / PÁTIO · groundlings',0,2.4,4.5);
+label('GALERIA SUPERIOR',11.2,8.0,2.3);
+label('GALERIA MÉDIA',12.0,5.5,3.3);
+label('GALERIA INFERIOR',12.3,3.0,4.2);
+label('PALCO AVANÇADO · APRON',0,2.5,-5.4);
+label('GALERIAS · assentos pagos',11,6.1,3.5);
+// light beams / daylight atmosphere
+const dust=new THREE.Group();scene.add(dust);
+const dustCount=90,dustParticles=[],dustObject=new THREE.Object3D();
+const dustMesh=new THREE.InstancedMesh(new THREE.SphereGeometry(.035,5,5),new THREE.MeshBasicMaterial({color:0xf4d7a0,transparent:true,opacity:.28}),dustCount);
+dustMesh.frustumCulled=false;dustMesh.castShadow=false;
+for(let i=0;i<dustCount;i++){
+  const p={x:(Math.random()-.5)*22,y:Math.random()*9,z:(Math.random()-.5)*20,s:.55+Math.random()*.7,speed:.08+(i%5)*.015};dustParticles.push(p);
+  dustObject.position.set(p.x,p.y,p.z);dustObject.scale.setScalar(p.s);dustObject.updateMatrix();dustMesh.setMatrixAt(i,dustObject.matrix);
+}
+dustMesh.instanceMatrix.needsUpdate=true;dust.add(dustMesh);
+// acoustic markers on three sides of thrust stage
+const markers=[];for(let p of [[0,1.55,-2.6],[-5.3,1.55,-6.8],[5.3,1.55,-6.8],[0,1.55,-9.1]]){let m=new THREE.Mesh(new THREE.TorusGeometry(.28,.045,8,20),new THREE.MeshBasicMaterial({color:0xffd16e}));m.rotation.x=Math.PI/2;m.position.set(...p);m.userData.acoustic=true;world.add(m);markers.push(m)}
+// Painel diegético de aprendizagem em VR: CanvasTexture, a 2 m da câmera.
+const vrCanvas=document.createElement('canvas');vrCanvas.width=1024;vrCanvas.height=640;
+const vctx=vrCanvas.getContext('2d');const vrTex=new THREE.CanvasTexture(vrCanvas);vrTex.colorSpace=THREE.SRGBColorSpace;
+// Vinheta breve para conforto durante teleporte e deslocamento por thumbstick.
+const vigCanvas=document.createElement('canvas');vigCanvas.width=512;vigCanvas.height=512;
+const vigCtx=vigCanvas.getContext('2d');const grad=vigCtx.createRadialGradient(256,256,120,256,256,255);
+grad.addColorStop(0,'rgba(0,0,0,0)');grad.addColorStop(.60,'rgba(0,0,0,.08)');grad.addColorStop(1,'rgba(0,0,0,.88)');
+vigCtx.fillStyle=grad;vigCtx.fillRect(0,0,512,512);
+const vigTex=new THREE.CanvasTexture(vigCanvas);
+const vignetteMat=new THREE.MeshBasicMaterial({map:vigTex,transparent:true,opacity:0,depthTest:false,depthWrite:false});
+const vignette=new THREE.Mesh(new THREE.PlaneGeometry(2.2,2.2),vignetteMat);vignette.position.set(0,0,-.62);vignette.renderOrder=99;camera.add(vignette);
+let vignetteTime=0;function pulseVignette(){vignetteTime=.32;vignetteMat.opacity=.86;}
+const vrPanel=new THREE.Mesh(new THREE.PlaneGeometry(1.55,.97),new THREE.MeshBasicMaterial({map:vrTex,transparent:true,side:THREE.DoubleSide,depthTest:false}));
+vrPanel.position.set(0,-.08,-2.05);vrPanel.renderOrder=20;vrPanel.visible=false;camera.add(vrPanel);
+let vrView='trail',vrQuizIndex=0,vrQuizChoice=null,vrQuizScore=0,vrQuizDone=false,vrReadout='';
+function drawVRPanel(){
+ vctx.clearRect(0,0,1024,640);vctx.fillStyle='rgba(24,18,13,.98)';vctx.fillRect(0,0,1024,640);
+ vctx.strokeStyle='#d6ad68';vctx.lineWidth=8;vctx.strokeRect(8,8,1008,624);
+ vctx.fillStyle='#e8c27d';vctx.font='bold 42px Georgia';
+ if(vrView==='trail'){
+  vctx.fillText('O GLOBE · TRILHA CÊNICA',42,66);
+  vctx.fillStyle='#fff0d8';vctx.font='bold 34px sans-serif';vctx.fillText(`ETAPA ${step+1}/3 · ${steps[step].title}`,42,130);
+  vctx.font='27px sans-serif';wrapCanvas(vctx,steps[step].text,42,180,930,39);
+  const buttons=[['ANTERIOR',22,500,125,92],['PRÓXIMA',157,500,125,92],['ATORES',292,500,125,92],['VISÃO ATOR',427,500,145,92],['PÚBLICO',582,500,118,92],['LUZ',710,500,105,92],['POSTURA',827,500,170,92]];
+  buttons.forEach(([t,x,y,w,h])=>{vctx.fillStyle='#79542f';vctx.fillRect(x,y,w,h);vctx.strokeStyle='#e0b96f';vctx.lineWidth=3;vctx.strokeRect(x,y,w,h);vctx.fillStyle='#fff0d8';vctx.font='bold 25px sans-serif';vctx.textAlign='center';vctx.fillText(t,x+w/2,y+56);});
+  vctx.textAlign='left';vctx.fillStyle='#e8c27d';vctx.font='24px sans-serif';vctx.fillText('Gatilho = selecionar · Grip = agarrar ator · Thumbstick = mover/girar 30°',42,450);
+  vctx.fillStyle='#fff0d8';vctx.font='22px sans-serif';wrapCanvas(vctx,vrReadout||'Escolha um ponto do palco para estimar a projeção vocal.',42,325,700,27);
+  vctx.fillStyle='#493622';vctx.fillRect(798,275,188,66);vctx.strokeStyle='#e0b96f';vctx.strokeRect(798,275,188,66);vctx.fillStyle='#fff0d8';vctx.font='bold 24px sans-serif';vctx.textAlign='center';vctx.fillText('OUVIR ETAPA',892,316);vctx.textAlign='left';
+  vctx.fillStyle='#6b4828';vctx.fillRect(798,365,188,72);vctx.strokeStyle='#e0b96f';vctx.strokeRect(798,365,188,72);vctx.fillStyle='#fff0d8';vctx.font='bold 28px sans-serif';vctx.textAlign='center';vctx.fillText('QUIZ FINAL',892,411);vctx.textAlign='left';
+ }else{
+  vctx.fillStyle='#e8c27d';vctx.font='bold 42px Georgia';vctx.fillText('QUIZ · APRENDIZAGEM',42,66);
+  if(vrQuizDone){
+   vctx.fillStyle='#fff0d8';vctx.font='bold 44px sans-serif';vctx.fillText(`Resultado: ${vrQuizScore}/2`,42,170);
+   vctx.font='30px sans-serif';wrapCanvas(vctx,vrQuizScore===2?'Excelente leitura do espaço teatral. Arquitetura, palavra e hierarquia social estão articuladas.':'Retome a trilha e observe como o palco avançado, a cenografia verbal e a distribuição dos lugares organizam a experiência.',42,235,920,42);
+   vctx.fillStyle='#79542f';vctx.fillRect(330,500,360,92);vctx.strokeStyle='#e0b96f';vctx.strokeRect(330,500,360,92);vctx.fillStyle='#fff0d8';vctx.font='bold 28px sans-serif';vctx.textAlign='center';vctx.fillText('VOLTAR À TRILHA',510,556);vctx.textAlign='left';
+  }else{
+   const q=quiz[vrQuizIndex];
+   vctx.fillStyle='#fff0d8';vctx.font='bold 30px sans-serif';vctx.fillText(`QUESTÃO ${vrQuizIndex+1} DE 2`,42,122);
+   vctx.font='27px sans-serif';wrapCanvas(vctx,q.q,42,165,930,34);
+   q.a.forEach((answer,i)=>{
+    const y=235+i*67;vctx.fillStyle=vrQuizChoice===i?'#a5773e':'#493622';vctx.fillRect(38,y,948,58);vctx.strokeStyle='#d6ad68';vctx.lineWidth=2;vctx.strokeRect(38,y,948,58);
+    vctx.fillStyle='#fff0d8';vctx.font='24px sans-serif';vctx.fillText(`${'ABCD'[i]}) ${answer}`,55,y+37);
+   });
+   if(vrQuizChoice!==null){
+    const ok=vrQuizChoice===q.correct;vctx.fillStyle='#e8c27d';vctx.font='bold 22px sans-serif';vctx.fillText(ok?'CORRETO':'REVEJA A RESPOSTA',42,525);
+    vctx.fillStyle='#fff0d8';vctx.font='19px sans-serif';wrapCanvas(vctx,q.why,42,552,700,24);
+    vctx.fillStyle='#79542f';vctx.fillRect(785,535,200,72);vctx.strokeStyle='#e0b96f';vctx.strokeRect(785,535,200,72);vctx.fillStyle='#fff0d8';vctx.font='bold 22px sans-serif';vctx.textAlign='center';vctx.fillText(vrQuizIndex===1?'RESULTADO':'PRÓXIMA',885,579);vctx.textAlign='left';
+   }
+  }
+  vctx.fillStyle='#6b4828';vctx.fillRect(42,575,180,48);vctx.strokeStyle='#e0b96f';vctx.strokeRect(42,575,180,48);vctx.fillStyle='#fff0d8';vctx.font='bold 19px sans-serif';vctx.textAlign='center';vctx.fillText('SAIR DO QUIZ',132,607);vctx.textAlign='left';
+ }
+ vrTex.needsUpdate=true;
+}
+function wrapCanvas(c,text,x,y,maxWidth,lineHeight){let words=text.split(' '),line='';for(let n=0;n<words.length;n++){let test=line+words[n]+' ';if(c.measureText(test).width>maxWidth&&n>0){c.fillText(line,x,y);line=words[n]+' ';y+=lineHeight}else line=test}c.fillText(line,x,y)}
+function vrPanelAction(uv){
+ let px=uv.x*1024,py=(1-uv.y)*640;
+ if(vrView==='trail'){
+  if(px>790&&py>270&&py<350){narrateCurrentStep();}
+  else if(px>790&&py>355&&py<450){vrView='quiz';vrQuizIndex=0;vrQuizChoice=null;vrQuizScore=0;vrQuizDone=false;}
+  else if(py>=490&&py<=610){
+   if(px<150)setStep(step-1);else if(px<285)setStep(Math.min(2,step+1));else if(px<420){actorMode=!actorMode;document.querySelector('#actorMode').textContent='Posicionar atores: '+(actorMode?'sim':'não');}
+   else if(px<575)teleport('stage');else if(px<705)teleportAudience();else if(px<820)setDay();else togglePosture();
+  }
+ }else{
+  if(py>570&&px<250){vrView='trail';}
+  else if(vrQuizDone){if(py>490){vrView='trail';}}
+  else if(vrQuizChoice!==null&&py>530&&px>760){
+   if(vrQuizIndex===0){vrQuizIndex=1;vrQuizChoice=null;}else{vrQuizDone=true;}
+  }else if(vrQuizChoice===null&&py>=235&&py<503){
+   let idx=Math.floor((py-235)/67);
+   if(idx>=0&&idx<4){vrQuizChoice=idx;if(idx===quiz[vrQuizIndex].correct)vrQuizScore++;}
+  }
+ }
+ drawVRPanel();
+}
+// interaction and modes
+let step=0,actorMode=false,dayMode=0,audienceViewIndex=-1,selected=null,dragging=false,muted=false,high=false,mouseDown=false;
+const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2(),clock=new THREE.Clock();let yaw=0,pitch=0;
+const steps=[
+{title:'Mapeamento socioespacial e acústico',text:'O palco avançado (apron / thrust stage) projeta-se no pátio. Selecione os anéis luminosos em diferentes lados do tablado e compare a projeção vocal estimada para públicos em 270°.',task:'Selecione pelo menos dois pontos do palco e compare o índice acústico.'},
+{title:'Dramaturgia sem cenário realista',text:'A apresentação ocorre à luz do dia. Alterne a luz e leia a fala: “A noite cobre a cidade; a lua esconde o caminho”. O texto produz noite, lugar e atmosfera sem cenário realista.',task:'Alterne a luz e observe que a noite é construída pela palavra, não por um blackout.'},
+{title:'Marcação cênica em três níveis',text:'Atue como diretor(a): posicione personagens no hell (subpalco), no tablado e na sacada. A altura, a distância e a visibilidade transformam a leitura de poder.',task:'Ative posicionamento e arraste pelo menos um ator para outro nível.'}
+];
+function setStep(n){step=Math.max(0,Math.min(2,n));if(typeof drawVRPanel==='function')drawVRPanel();let s=steps[step];document.querySelector('#stepLabel').textContent=`TRILHA EM VR · ETAPA ${step+1} DE 3`;document.querySelector('#stepTitle').textContent=s.title;document.querySelector('#stepText').textContent=s.text;document.querySelector('#instruction').textContent=s.task;document.querySelector('#bar').style.width=((step+1)/3*100)+'%';document.querySelector('#next').textContent=step===2?'Concluir trilha':'Próxima etapa';if(step===1){caption('“A noite cobre a cidade; a lua esconde o caminho.” — exemplo didático de cenografia verbal.');}else caption('');}
+function caption(t){let el=document.querySelector('#caption');el.textContent=t;el.style.display=t?'block':'none'}
+function notice(t){noticeEl.textContent=t;noticeEl.style.display='block';clearTimeout(noticeEl._t);noticeEl._t=setTimeout(()=>noticeEl.style.display='none',3200)}
+function acoustic(point){let listeners=[new THREE.Vector3(0,1.6,3.5),new THREE.Vector3(-11,3.2,2),new THREE.Vector3(11,5.6,2)];let src=new THREE.Vector3(...point);let vals=listeners.map((p,i)=>{let d=Math.max(1,src.distanceTo(p));let dir=new THREE.Vector3(0,0,1);let toward=p.clone().sub(src).normalize();let orient=Math.max(.35,(dir.dot(toward)+1)/2);return 88-20*Math.log10(d)-5*Math.abs(1-orient)});return vals}
+function selectAcoustic(m){let v=acoustic(m.position.toArray());vrReadout=`Projeção estimada (dB rel.): pátio ${v[0].toFixed(1)} · galeria média ${v[1].toFixed(1)} · galeria alta ${v[2].toFixed(1)}. Modelo simplificado distância/direção; não é medição acústica.`;document.querySelector('#readout').textContent=vrReadout;drawVRPanel();m.material.color.set(0x6dffb0);if(!muted){try{let ctx=new AudioContext(),o=ctx.createOscillator(),gain=ctx.createGain();o.frequency.value=210;gain.gain.value=.045;o.connect(gain).connect(ctx.destination);o.start();o.stop(ctx.currentTime+.18);o.onended=()=>ctx.close()}catch(e){}}}
+function setDay(){dayMode=(dayMode+1)%3;let settings=[['tarde',0xffd6a0,2.4,0x9b8770],['nublado',0xc7d5df,1.3,0x718091],['fim de tarde',0xff9c5c,1.8,0x815b50]][dayMode];sun.color.set(settings[1]);sun.intensity=settings[2];scene.background.set(settings[3]);scene.fog.color.set(settings[3]);document.querySelector('#day').textContent='Luz: '+settings[0];if(typeof drawVRPanel==='function')drawVRPanel();notice('A iluminação muda; a fala continua capaz de situar uma cena noturna.')}
+const audienceViews=[
+ {id:'pit',label:'Pátio · groundlings',floor:0,x:0,z:9.5,look:[0,2,-7],yaw:0},
+ {id:'gallery1',label:'Galeria inferior · assentos pagos',floor:2.15,x:0,z:10.9,look:[0,2,-7],yaw:0},
+ {id:'gallery2',label:'Galeria média · assentos pagos',floor:4.65,x:0,z:11.15,look:[0,2.5,-7],yaw:0},
+ {id:'gallery3',label:'Galeria superior · assentos pagos',floor:7.15,x:0,z:11.25,look:[0,3,-7],yaw:0}
+];
+function teleport(where){
+  const target=where==='stage'
+    ?{floor:1.57,x:0,z:-8.25,look:[0,2.0,4.8],label:'ator no centro do apron stage',yaw:Math.PI}
+    :audienceViews.find(v=>v.id===where)||audienceViews[0];
+  const eye=seatedMode?1.15:1.65;
+  pulseVignette();
+  if(renderer.xr.isPresenting){
+    yaw=target.yaw??0;camera.rotation.y=yaw;
+    let xrCam=renderer.xr.getCamera(camera);
+    camera.position.x+=target.x-xrCam.position.x;
+    camera.position.z+=target.z-xrCam.position.z;
+    camera.position.y+=target.floor+eye-xrCam.position.y;
+  }else{
+    camera.position.set(target.x,target.floor+eye,target.z);
+    camera.lookAt(new THREE.Vector3(...target.look));yaw=camera.rotation.y;
+  }
+  vrReadout='Ponto de vista: '+target.label+'.';
+  drawVRPanel();
+  notice('Ponto de vista: '+target.label+'.');
+}
+function teleportAudience(){
+  audienceViewIndex=(audienceViewIndex+1)%audienceViews.length;
+  teleport(audienceViews[audienceViewIndex].id);
+}
+document.querySelector('#prev').onclick=()=>setStep(step-1);document.querySelector('#next').onclick=()=>{if(step<2)setStep(step+1);else notice('Trilha concluída. Responda ao quiz para consolidar a aprendizagem.')};
+document.querySelector('#actorMode').onclick=()=>{actorMode=!actorMode;document.querySelector('#actorMode').textContent='Posicionar atores: '+(actorMode?'sim':'não');notice(actorMode?'Arraste os personagens para marcar a cena.':'Posicionamento encerrado.')};
+document.querySelector('#day').onclick=setDay;document.querySelector('#teleStage').onclick=()=>teleport('stage');document.querySelector('#telePit').onclick=teleportAudience;
+document.querySelector('#sound').onclick=()=>{muted=!muted;document.querySelector('#sound').textContent=muted?'Som: mudo':'Som: ligado'};
+function narrateCurrentStep(){
+  if(muted){notice('Ative o som para ouvir a narração.');return}
+  if(!('speechSynthesis' in window)){notice('A narração não está disponível neste navegador.');return}
+  speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(steps[step].title+'. '+steps[step].text);u.lang='pt-BR';u.rate=.92;speechSynthesis.speak(u);
+}
+document.querySelector('#narrate').onclick=narrateCurrentStep;
+let seatedMode=false;
+function togglePosture(){
+  seatedMode=!seatedMode;document.querySelector('#posture').textContent='Modo: '+(seatedMode?'sentado':'em pé');
+  camera.position.y=renderer.xr.isPresenting?(seatedMode?-.35:0):(seatedMode?1.15:1.65);
+  notice(seatedMode?'Altura de visualização ajustada para modo sentado.':'Altura de visualização ajustada para modo em pé.');
+  if(typeof drawVRPanel==='function')drawVRPanel();
+}
+document.querySelector('#posture').onclick=togglePosture;
+document.querySelector('#contrast').onclick=()=>{high=!high;document.body.classList.toggle('high',high)};
+document.querySelector('#creditsBtn').onclick=()=>document.querySelector('#credits').style.display='flex';document.querySelector('#closeCredits').onclick=()=>document.querySelector('#credits').style.display='none';
+document.querySelector('#helpBtn').onclick=()=>document.querySelector('#help').style.display='flex';document.querySelector('#closeHelp').onclick=()=>document.querySelector('#help').style.display='none';
+document.querySelector('#closeQuiz').onclick=()=>document.querySelector('#quiz').style.display='none';
+const quiz=[{q:'De que maneira o apron stage, cercado pelo público em três lados, influenciava atuação e dramaturgia?',a:['Exigia cenários pintados gigantescos que bloqueavam a visão lateral.','Favorecia atuação dinâmica, proximidade e cenografia verbal para indicar tempo e ambiente.','Isolava os atores atrás de uma cortina fechada.','Permitía encenações apenas à noite com refletores elétricos.'],correct:1,why:'O palco projetado aproximava atores e espectadores. A luz natural e a escassez de cenários realistas valorizavam a palavra, os gestos e a imaginação do público.'},{q:'Como a divisão arquitetônica refletia a estratificação social?',a:['Todos pagavam o mesmo e ocupavam assentos idênticos.','O público de menor preço ficava em pé no yard; quem pagava mais podia ocupar assentos nas galerias.','Só a realeza podia entrar.','Os atores atuavam nas galerias e a plateia no tablado.'],correct:1,why:'O preço organizava a experiência: groundlings no pátio descoberto e espectadores com maior poder aquisitivo em assentos cobertos. A verticalidade tornava a hierarquia visível.'}];let qidx=0,score=0,answered=false;
+function renderQuiz(){let q=quiz[qidx],root=document.querySelector('#qcontent');root.innerHTML=`<h3>Questão ${qidx+1} de ${quiz.length}</h3><p>${q.q}</p>`+q.a.map((a,i)=>`<button class="answer" data-i="${i}">${'ABCD'[i]}) ${a}</button>`).join('')+`<div id="feedback" style="display:none"></div><button id="qnext" style="display:none;margin-top:12px"> ${qidx===quiz.length-1?'Ver resultado':'Próxima questão'} </button>`;root.querySelectorAll('.answer').forEach(b=>b.onclick=()=>{if(answered)return;answered=true;let ok=+b.dataset.i===q.correct;if(ok)score++;let f=root.querySelector('#feedback');f.style.display='block';f.innerHTML=`<b>${ok?'Resposta correta':'Resposta não correta'}.</b> ${q.why}`;root.querySelectorAll('.answer').forEach((x,i)=>{x.disabled=true;if(i===q.correct)x.style.borderColor='#8ed39a'});let n=root.querySelector('#qnext');n.style.display='inline-block';n.onclick=()=>{if(qidx<quiz.length-1){qidx++;answered=false;renderQuiz()}else{root.innerHTML=`<h3>Resultado: ${score}/${quiz.length}</h3><p>${score===2?'Excelente leitura do espaço teatral.': 'Retome as etapas e observe como arquitetura, palavra e posição social se articulam.'}</p><p>Para discutir em sala: a proximidade do público e a distribuição vertical mudam quem vê, quem é visto e como o ator se dirige à plateia.</p>`;}}})}
+document.querySelector('#quizBtn').onclick=()=>{qidx=0;score=0;answered=false;renderQuiz();document.querySelector('#quiz').style.display='flex'};
+// Desktop/tablet camera navigation
+let keys={};addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true});addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+function snapActorToLevel(a,x,z){
+  a.position.x=x;a.position.z=z;
+  if(z < -9.55){a.userData.role='sacada';a.position.y=7.35;}
+  else if(z > -5.8 && z < -4.0 && Math.abs(x)<1.9){a.userData.role='hell';a.position.y=-.15;}
+  else{a.userData.role='palco';a.position.y=1.42;}
+}
+let draggingLook=false,lastX=0,lastY=0;
+renderer.domElement.addEventListener('pointerdown',e=>{pointer.x=e.clientX/innerWidth*2-1;pointer.y=-(e.clientY/innerHeight)*2+1;raycaster.setFromCamera(pointer,camera);let hits=raycaster.intersectObjects([...actors,...markers],true);if(hits.length){let obj=hits[0].object;while(obj.parent&&!obj.userData.actor&&!obj.userData.acoustic)obj=obj.parent;if(obj.userData.acoustic){selectAcoustic(obj);return}if(actorMode&&obj.userData.actor){selected=obj;dragging=true;return}}draggingLook=true;lastX=e.clientX;lastY=e.clientY});
+renderer.domElement.addEventListener('pointermove',e=>{if(dragging&&selected){pointer.x=e.clientX/innerWidth*2-1;pointer.y=-(e.clientY/innerHeight)*2+1;raycaster.setFromCamera(pointer,camera);let plane=new THREE.Plane(new THREE.Vector3(0,1,0),-selected.position.y);let pt=new THREE.Vector3();if(raycaster.ray.intersectPlane(plane,pt)){snapActorToLevel(selected,THREE.MathUtils.clamp(pt.x,-6,6),THREE.MathUtils.clamp(pt.z,-11,-3))}}else if(draggingLook){let dx=e.clientX-lastX,dy=e.clientY-lastY;camera.rotation.order='YXZ';camera.rotation.y-=dx*.004;camera.rotation.x=THREE.MathUtils.clamp(camera.rotation.x-dy*.003,-1.1,1.1);lastX=e.clientX;lastY=e.clientY}});
+addEventListener('pointerup',()=>{dragging=false;selected=null;draggingLook=false});
+function desktopMove(dt){if(renderer.xr.isPresenting)return;let forward=new THREE.Vector3(-Math.sin(camera.rotation.y),0,-Math.cos(camera.rotation.y));let right=new THREE.Vector3(Math.cos(camera.rotation.y),0,-Math.sin(camera.rotation.y));let v=new THREE.Vector3();if(keys.w||keys.arrowup)v.add(forward);if(keys.s||keys.arrowdown)v.sub(forward);if(keys.d||keys.arrowright)v.add(right);if(keys.a||keys.arrowleft)v.sub(right);if(v.lengthSq())camera.position.addScaledVector(v.normalize(),dt*4.0);}
+// XR controller ray and panels
+const controller=renderer.xr.getController(0),grip=renderer.xr.getControllerGrip(0);scene.add(controller,grip);
+const rayLine=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3(0,0,-12)]),new THREE.LineBasicMaterial({color:0xffd27a}));controller.add(rayLine);
+const handRay=new THREE.Raycaster();let xrHeld=null,prevTrigger=false,prevGrip=false,lastStick=0;
+function controllerAction(){if(!renderer.xr.isPresenting)return;let src=[...(renderer.xr.getSession()?.inputSources||[])].find(s=>s.gamepad);let gp=src?.gamepad;let trigger=gp?.buttons?.[0]?.pressed||false,gripNow=gp?.buttons?.[1]?.pressed||false;
+handRay.setFromXRController(controller);let objs=[...markers,...actors];let panelHit=handRay.intersectObject(vrPanel,false)[0];let hit=handRay.intersectObjects(objs,true)[0];
+if(trigger&&!prevTrigger&&panelHit){vrPanelAction(panelHit.uv);}
+else if(trigger&&!prevTrigger&&hit){let o=hit.object;while(o.parent&&!o.userData.actor&&!o.userData.acoustic)o=o.parent;if(o.userData.acoustic)selectAcoustic(o);else if(actorMode&&o.userData.actor){xrHeld=o}}
+if(gripNow&&!prevGrip&&hit){let o=hit.object;while(o.parent&&!o.userData.actor)o=o.parent;if(o.userData.actor)xrHeld=o}
+if((gripNow||trigger)&&xrHeld){let dir=new THREE.Vector3(0,0,-1).applyQuaternion(controller.quaternion);let pos=controller.getWorldPosition(new THREE.Vector3()).addScaledVector(dir,2.2);snapActorToLevel(xrHeld,THREE.MathUtils.clamp(pos.x,-6,6),THREE.MathUtils.clamp(pos.z,-12,-3))}
+if(!gripNow&&!trigger)xrHeld=null;
+if(gp?.axes?.length>=4){let sx=gp.axes[2],sy=gp.axes[3];let now=performance.now();if(Math.abs(sx)>.75&&now-lastStick>450){yaw+=Math.sign(sx)*Math.PI/6;camera.rotation.y=yaw;pulseVignette();lastStick=now}if(sy<-.8&&now-lastStick>450){let p=renderer.xr.getCamera(camera).position.clone();camera.position.x+=Math.sin(yaw)*1.2;camera.position.z-=Math.cos(yaw)*1.2;pulseVignette();lastStick=now}if(sy>.8&&now-lastStick>450){camera.position.x-=Math.sin(yaw)*1.2;camera.position.z+=Math.cos(yaw)*1.2;pulseVignette();lastStick=now}}
+prevTrigger=trigger;prevGrip=gripNow}
+function handRaySet(){controller.updateMatrixWorld(true);vrPanel.updateMatrixWorld(true);handRay.ray.origin.setFromMatrixPosition(controller.matrixWorld);handRay.ray.direction.set(0,0,-1).applyMatrix4(new THREE.Matrix4().extractRotation(controller.matrixWorld))}
+function setupVR(){let b=VRButton.createButton(renderer,{optionalFeatures:['local-floor','bounded-floor']});b.style.position='fixed';b.style.left='50%';b.style.bottom='12px';b.style.transform='translateX(-50%)';b.style.zIndex='10';document.body.appendChild(b)}
+if(navigator.xr){navigator.xr.isSessionSupported('immersive-vr').then(ok=>{if(ok){setupVR();document.querySelector('#vrhint').textContent='Pico Neo 3: gatilho seleciona · grip agarra · thumbstick desloca e gira 30°.'}else notice('WebXR imersivo indisponível. Modo 3D de navegador ativado.')}).catch(()=>notice('WebXR indisponível. Modo 3D de navegador ativado.'))}else notice('Este navegador não oferece WebXR imersivo; explore no modo 3D.');
+renderer.xr.addEventListener('sessionstart',()=>{camera.position.y=seatedMode?-.35:0;yaw=camera.rotation.y;camera.rotation.x=0;vrPanel.visible=true;drawVRPanel();document.querySelector('#ui').style.display='none';document.querySelector('#hud').style.display='none';notice('Modo VR ativo. Use o raio do controle e o gatilho.');});
+renderer.xr.addEventListener('sessionend',()=>{vrPanel.visible=false;camera.position.y=seatedMode?1.15:1.65;document.querySelector('#ui').style.display='flex';document.querySelector('#hud').style.display='block';});
+const debug=new URLSearchParams(location.search).get('debug')==='1';if(debug)document.querySelector('#debug').style.display='block';
+let fpsFrames=0,fpsTime=0,fps=0;
+function animate(){let dt=Math.min(clock.getDelta(),.04);desktopMove(dt);controllerAction();actors.forEach((a,i)=>{a.rotation.y=Math.sin(clock.elapsedTime*1.2+i)*.045;a.position.y+=(a.userData.role==='hell'?-0.15:(a.userData.role==='sacada'?7.35:1.42)-a.position.y)*.04});for(let i=0;i<dustCount;i++){let p=dustParticles[i];p.y+=dt*p.speed;if(p.y>10)p.y=0;dustObject.position.set(p.x,p.y,p.z);dustObject.scale.setScalar(p.s);dustObject.updateMatrix();dustMesh.setMatrixAt(i,dustObject.matrix)}dustMesh.instanceMatrix.needsUpdate=true;
+if(vignetteTime>0){vignetteTime=Math.max(0,vignetteTime-dt);vignetteMat.opacity=.86*(vignetteTime/.32)}else vignetteMat.opacity=0;
+renderer.render(scene,camera);if(debug){fpsFrames++;fpsTime+=dt;if(fpsTime>=.5){fps=fpsFrames/fpsTime;fpsFrames=0;fpsTime=0;document.querySelector('#debug').textContent=`FPS ${fps.toFixed(0)} | triângulos ${renderer.info.render.triangles.toLocaleString('pt-BR')} | draw calls ${renderer.info.render.calls}`}}
+}
+renderer.setAnimationLoop(animate);
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+setStep(0);notice('Explore o palco avançado. O pátio é aberto ao céu; as galerias são cobertas.');
+// Fallback if XR session cannot be entered: standard WebGL remains interactive.
+</script>
+</body></html>
